@@ -14,52 +14,67 @@
 ** You will need to compile your program with a "-lpthread" option.
 */
 
-#define NUM_THREADS 2
+#define NUM_THREADS 8
 
+pthread_mutex_t mutex;
 int i;
 
-void *foo (void *bar)
-{
-    pthread_t *me = new pthread_t (pthread_self());
-    printf("in a foo thread, ID %ld\n", *me);
+void* foo(void* bar) {
+	pthread_t* me = new pthread_t(pthread_self());
+	printf("in a foo thread, ID %ld\n", *me);
 
-    for (i = 0; i < *((int *) bar); i++)
-    {
-        int tmp = i;
+	// Grab mutex for initialization.
+	pthread_mutex_lock(&mutex);
+	// "Critical Section"
+	i = 0;
+	pthread_mutex_unlock(&mutex);
 
-        if (tmp != i)
-        {
-            printf ("aargh: %d != %d\n", tmp, i);
-        }
-    }
+	while (true) {
+		pthread_mutex_lock(&mutex);
+		// "Critical Section"
+		if ( !(i < *((int*) bar)) ) { 
+			// Release lock, even if we break early.
+			// If we just 'break', the lock would still be held.
+			pthread_mutex_unlock(&mutex);
+			break;
+		}
+		
+		int tmp = i;
 
-    pthread_exit (me);
+		if (tmp != i) {
+			printf ("aargh: %d != %d\n", tmp, i);
+		}
+
+		i++;
+		pthread_mutex_unlock(&mutex);
+
+	}
+
+	pthread_exit(me);
 }
 
-int main(int argc, char **argv)
-{
-    int iterations = strtol(argv[1], NULL, 10);
-    pthread_t threads[NUM_THREADS];
+int main(int argc, char** argv) {
+	int iterations = strtol(argv[1], NULL, 10);
+	pthread_t threads[NUM_THREADS];
+	pthread_mutex_init(&mutex, NULL);
 
-    for (int i = 0; i < NUM_THREADS; i++)
-    {
-        if (pthread_create(&threads[i], NULL, foo, (void *) &iterations))
-        {
-            perror ("pthread_create");
-            return (1);
-        }
-    }
 
-    for (int i = 0; i < NUM_THREADS; i++)
-    {
-        void *status;
-        if (pthread_join (threads[i], &status))
-        {
-            perror ("pthread_join");
-            return (1);
-        }
-        printf("joined a foo thread, number %ld\n", *((pthread_t *) status));
-    }
+	for (int i = 0; i < NUM_THREADS; i++) {
+		if (pthread_create(&threads[i], NULL, foo, (void*) &iterations)) {
+			perror("pthread_create");
+			return (1);
+		}
+	}
 
-    return (0);
+	for (int i = 0; i < NUM_THREADS; i++) {
+		void *status;
+		if (pthread_join (threads[i], &status)) {
+			perror("pthread_join");
+			return (1);
+		}
+		printf("joined a foo thread, number %ld\n", *((pthread_t*) status));
+	}
+
+	pthread_mutex_destroy(&mutex);
+	return (0);
 }
